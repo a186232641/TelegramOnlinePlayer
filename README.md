@@ -11,7 +11,7 @@
   - **待办**:把 Syncer/backend 接到 broker、探测 PlayMode(§4.1.5)、缩略图(§4.1.6)、全量对账检删(§4.1.3)
 - [x] **目录 API**:`/api/streamers`(主播网格)、`/api/timeline?streamer=`(跨年时间线)、`/api/media/{token}`(详情),均需登录 cookie;响应 DTO 不泄露 `cache_path`/`last_error` 等内部字段;未配置 DB 时回 503。以 fake store 单测。
 - [ ] Phase 4 · 缓存播放(下载、归一化、签名 URL、LRU)
-- [ ] Phase 5 · 前端主播网格 / 时间线 / 播放页
+- [x] **Phase 5 · 前端(主播网格 / 时间线 / 播放页)**:纯 JS SPA(hash 路由,无构建步骤,`go:embed` 进 binary)。`whoami` 鉴权门 + 登录视图;主播网格 → 时间线 → 播放页三级;播放页按 §13.4 换签契约编写(`/play-url` → ready/202 轮询 `/status`),Phase 4 接口缺位时优雅降级提示。受保护接口 401 自动回登录。静态资源嵌入有 Go 测试守卫。
 - [ ] Phase 6 · tdl Web 引导登录
 
 ## 本地开发
@@ -68,7 +68,7 @@ internal/syncer/      同步服务:文件名解析(§6)+ Exporter 接口 + Synce
 internal/broker/      gotd MTProto 出口:生命周期/登录/限速/导出/下载/Range + 内部 HTTP API
 internal/brokerclient/    broker 内部 API 的 Go 客户端(实现 syncer.Exporter)
 internal/httpserver/  backend HTTP 路由与处理器
-internal/httpserver/web/  静态前端资源(嵌入 binary)
+internal/httpserver/web/  静态前端资源(嵌入 binary):index.html 壳 + app.js(SPA)+ app.css
 ```
 
 ## tdl-broker(Telegram 出口)

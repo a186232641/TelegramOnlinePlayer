@@ -1,0 +1,111 @@
+:root {
+  --bg: #111;
+  --surface: #1c1c1c;
+  --surface-2: #2a2a2a;
+  --border: #333;
+  --text: #eee;
+  --muted: #9a9a9a;
+  --accent: #4a90e2;
+  --danger: #e25555;
+  --ok: #5cb85c;
+}
+
+* { box-sizing: border-box; }
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  margin: 0; background: var(--bg); color: var(--text);
+  min-height: 100vh;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* 顶栏 */
+.topbar {
+  display: flex; align-items: center; gap: 16px;
+  padding: 12px 20px; background: var(--surface);
+  border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10;
+}
+.topbar h1 { font-size: 16px; font-weight: 600; margin: 0; }
+.topbar .spacer { flex: 1; }
+.topbar button {
+  background: transparent; color: var(--muted); border: 1px solid var(--border);
+  border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+}
+.topbar button:hover { color: var(--text); border-color: var(--accent); }
+.crumb { color: var(--muted); font-size: 14px; }
+
+main { padding: 20px; max-width: 1100px; margin: 0 auto; }
+
+/* 登录卡片 */
+.login-wrap { min-height: 100vh; display: grid; place-items: center; }
+.card {
+  background: var(--surface); padding: 32px 28px; border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.4); width: 320px;
+}
+.card h1 { font-size: 18px; margin: 0 0 16px; font-weight: 500; }
+input {
+  width: 100%; padding: 10px 12px; background: var(--surface-2);
+  border: 1px solid var(--border); color: var(--text);
+  border-radius: 6px; font-size: 14px;
+}
+input:focus { outline: none; border-color: var(--accent); }
+button.primary {
+  width: 100%; margin-top: 12px; padding: 10px; background: var(--accent);
+  color: #fff; border: 0; border-radius: 6px; font-size: 14px; cursor: pointer;
+}
+button.primary:disabled { opacity: .6; cursor: not-allowed; }
+.msg { font-size: 13px; margin-top: 10px; min-height: 18px; }
+.msg.err { color: var(--danger); }
+.msg.ok { color: var(--ok); }
+
+/* 主播网格 */
+.grid {
+  display: grid; gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+.tile {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; overflow: hidden; cursor: pointer; transition: border-color .15s;
+}
+.tile:hover { border-color: var(--accent); }
+.tile .thumb {
+  aspect-ratio: 1 / 1; background: var(--surface-2);
+  display: grid; place-items: center; color: var(--muted); font-size: 40px;
+}
+.tile .thumb img { width: 100%; height: 100%; object-fit: cover; }
+.tile .meta { padding: 10px 12px; }
+.tile .meta .name { font-size: 14px; font-weight: 500; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.tile .meta .sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+/* 时间线 */
+.timeline { list-style: none; padding: 0; margin: 0; }
+.timeline li {
+  display: flex; align-items: center; gap: 14px; padding: 12px 14px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; margin-bottom: 10px; cursor: pointer;
+}
+.timeline li:hover { border-color: var(--accent); }
+.timeline .when { font-variant-numeric: tabular-nums; font-size: 14px; min-width: 160px; }
+.timeline .fn { color: var(--muted); font-size: 13px; flex: 1;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.badge {
+  font-size: 11px; padding: 2px 8px; border-radius: 999px;
+  background: var(--surface-2); color: var(--muted); border: 1px solid var(--border);
+}
+.badge.pass { color: var(--ok); }
+
+/* 播放页 */
+.player video { width: 100%; border-radius: 10px; background: #000; }
+.player .info { margin-top: 14px; color: var(--muted); font-size: 14px; line-height: 1.7; }
+.notice {
+  margin-top: 16px; padding: 12px 14px; border-radius: 8px;
+  background: var(--surface); border: 1px solid var(--border); color: var(--muted); font-size: 14px;
+}
+.notice.warn { border-color: #5a4a1a; }
+
+.empty, .loading { color: var(--muted); padding: 40px 0; text-align: center; }
+.spin { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border);
+  border-top-color: var(--accent); border-radius: 50%; animation: r .8s linear infinite;
+  vertical-align: -3px; margin-right: 8px; }
+@keyframes r { to { transform: rotate(360deg); } }
