@@ -10,7 +10,7 @@
   - **tdl-broker 骨架(已搭)**:基于 gotd 的 MTProto 单一出口(`cmd/broker`)。生命周期 + session 文件存储、登录流程(发码/验证码/2FA/状态/注销,步骤 token + TTL)、令牌桶+并发门限速、历史导出 / 整文件下载 / 1MB 对齐 Range 读、内部 HTTP API(共享密钥 Bearer)、`brokerclient` 客户端(实现 `syncer.Exporter`)。纯逻辑与 HTTP 契约均已单测;**真正连接 Telegram 需 `TG_API_ID/HASH` 并完成一次交互式登录**。
   - **待办**:把 Syncer/backend 接到 broker、探测 PlayMode(§4.1.5)、缩略图(§4.1.6)、全量对账检删(§4.1.3)
 - [x] **目录 API**:`/api/streamers`(主播网格)、`/api/timeline?streamer=`(跨年时间线)、`/api/media/{token}`(详情),均需登录 cookie;响应 DTO 不泄露 `cache_path`/`last_error` 等内部字段;未配置 DB 时回 503。以 fake store 单测。
-- [ ] Phase 4 · 缓存播放(下载、归一化、签名 URL、LRU)
+- [x] **Phase 4 · 缓存播放**:签名播放 URL(换签 200/202 + `/status` 轮询)、`/play/{token}` 校验签名后三路分流(passthrough 经 broker Range 透传 206 / 缓存命中 `ServeFile` / 未就绪 409);`mediacache` 容量上限 + LRU + TTL 淘汰保护 + 原子写 + 超大拒绝;`normalize` ffprobe/ffmpeg remux+transcode(参数数组防注入、+faststart);`mediaprep` 异步编排(下载→归一化→原子入缓存→更新状态)+ single-flight + 转码 worker 池。均以 fake 单测;真转码需本机 ffmpeg、透传/下载需 broker 已登录。
 - [x] **Phase 5 · 前端(主播网格 / 时间线 / 播放页)**:纯 JS SPA(hash 路由,无构建步骤,`go:embed` 进 binary)。`whoami` 鉴权门 + 登录视图;主播网格 → 时间线 → 播放页三级;播放页按 §13.4 换签契约编写(`/play-url` → ready/202 轮询 `/status`),Phase 4 接口缺位时优雅降级提示。受保护接口 401 自动回登录。静态资源嵌入有 Go 测试守卫。
 - [ ] Phase 6 · tdl Web 引导登录
 
@@ -36,6 +36,12 @@ $env:HTTP_ADDR            = ':8080'
 $env:POSTGRES_DSN         = 'postgres://user:pass@localhost:5432/recordings?sslmode=disable'
 # 可选:文件名时间戳的假定时区(见 design §6),默认 Asia/Shanghai;tzdata 已内嵌
 $env:MEDIA_TIMEZONE       = 'Asia/Shanghai'
+# 可选:接入 broker 后启用在线播放(透传 + remux/transcode 缓存)
+$env:BROKER_URL           = 'http://localhost:8090'
+$env:BROKER_INTERNAL_TOKEN= '与 broker 一致的共享密钥'
+$env:CACHE_DIR            = './cache'
+$env:CACHE_MAX_BYTES      = '21474836480'  # 20 GiB,含下载/转码临时区
+$env:TRANSCODE_CONCURRENCY= '1'            # ffmpeg 转码并发上限
 go run ./cmd/app
 
 # 4. 浏览器打开 http://localhost:8080,输入密码即可登录
@@ -66,7 +72,10 @@ internal/db/migrations/   SQL 迁移文件(<version>_<desc>.sql)
 internal/catalog/     目录领域模型与存取层(Store)、StreamToken 生成
 internal/syncer/      同步服务:文件名解析(§6)+ Exporter 接口 + Syncer 编排
 internal/broker/      gotd MTProto 出口:生命周期/登录/限速/导出/下载/Range + 内部 HTTP API
-internal/brokerclient/    broker 内部 API 的 Go 客户端(实现 syncer.Exporter)
+internal/brokerclient/    broker 内部 API 的 Go 客户端(实现 syncer.Exporter / MediaSource)
+internal/mediacache/  归一化产物缓存:容量上限 + LRU + TTL 保护 + 原子写
+internal/normalize/   ffprobe/ffmpeg 探测与 remux/transcode 归一化
+internal/mediaprep/   remux/transcode 冷路径异步编排(下载→归一化→入缓存,single-flight)
 internal/httpserver/  backend HTTP 路由与处理器
 internal/httpserver/web/  静态前端资源(嵌入 binary):index.html 壳 + app.js(SPA)+ app.css
 ```

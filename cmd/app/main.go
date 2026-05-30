@@ -7,15 +7,20 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 	_ "time/tzdata" // 内嵌 IANA 时区库,保证 MEDIA_TIMEZONE 在 Windows/精简容器内也能解析
 
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/term"
 
 	"telegram-online-player/internal/brokerclient"
+	"telegram-online-player/internal/catalog"
 	"telegram-online-player/internal/config"
 	"telegram-online-player/internal/db"
 	"telegram-online-player/internal/httpserver"
+	"telegram-online-player/internal/mediacache"
+	"telegram-online-player/internal/mediaprep"
+	"telegram-online-player/internal/normalize"
 )
 
 func main() {
@@ -59,15 +64,27 @@ func runServe() error {
 		logger.Warn("POSTGRES_DSN 未配置,目录功能不可用(仅鉴权可用)")
 	}
 
-	// 配置了 broker 则接入,作为 passthrough 透传源;否则播放透传不可用。
+	// 配置了 broker 则接入,作为 passthrough 透传源与下载源;否则透传/缓存准备不可用。
 	var source httpserver.MediaSource
+	var preparer httpserver.Preparer
 	if cfg.BrokerURL != "" {
-		source = brokerclient.New(cfg.BrokerURL, cfg.BrokerToken, nil)
+		bc := brokerclient.New(cfg.BrokerURL, cfg.BrokerToken, nil)
+		source = bc
+
+		// remux/transcode 冷路径异步准备(需 DB 记录状态 + ffmpeg)。
+		if pool != nil {
+			cache, err := mediacache.New(cfg.CacheDir, cfg.CacheMaxBytes, 10*time.Minute)
+			if err != nil {
+				return fmt.Errorf("初始化缓存失败: %w", err)
+			}
+			preparer = mediaprep.New(ctx, catalog.NewStore(pool.Pool), bc,
+				normalize.NewFFmpeg(), cache, cfg.TranscodeConcurrency, logger)
+		}
 	} else {
-		logger.Warn("BROKER_URL 未配置,passthrough 透传不可用")
+		logger.Warn("BROKER_URL 未配置,passthrough 透传与缓存准备不可用")
 	}
 
-	srv := httpserver.New(cfg, logger, pool, source, nil)
+	srv := httpserver.New(cfg, logger, pool, source, preparer)
 	return srv.Run(ctx)
 }
 
