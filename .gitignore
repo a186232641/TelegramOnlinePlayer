@@ -1,0 +1,33 @@
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Go build artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+bin/
+dist/
+
+# 依赖与缓存
+vendor/
+
+# 运行时数据(后续将出现的目录,提前忽略)
+data/
+cache/
+tdl-session/
+*.session
+*.session-journal
+
+# 环境变量与本地配置
+.env
+.env.local
+config.local.*
+
+# 日志
+*.log
+logs/
