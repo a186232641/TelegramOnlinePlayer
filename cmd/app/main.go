@@ -12,6 +12,7 @@ import (
 	"golang.org/x/term"
 
 	"telegram-online-player/internal/config"
+	"telegram-online-player/internal/db"
 	"telegram-online-player/internal/httpserver"
 )
 
@@ -41,7 +42,22 @@ func runServe() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	srv := httpserver.New(cfg, logger)
+	// POSTGRES_DSN 已配置则连接并迁移;未配置则降级为 auth-only,便于本地调试。
+	var pool *db.Pool
+	if cfg.PostgresDSN != "" {
+		pool, err = db.Connect(ctx, cfg.PostgresDSN)
+		if err != nil {
+			return err
+		}
+		defer pool.Close()
+		if err := pool.Migrate(ctx, logger); err != nil {
+			return err
+		}
+	} else {
+		logger.Warn("POSTGRES_DSN 未配置,目录功能不可用(仅鉴权可用)")
+	}
+
+	srv := httpserver.New(cfg, logger, pool)
 	return srv.Run(ctx)
 }
 

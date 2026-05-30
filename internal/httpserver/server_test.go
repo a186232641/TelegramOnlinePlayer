@@ -34,7 +34,7 @@ func newTestServer(t *testing.T, password string) *Server {
 		CookieSecure:       false,
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return New(cfg, logger)
+	return New(cfg, logger, nil)
 }
 
 func TestLoginWhoamiFlow(t *testing.T) {
@@ -119,8 +119,15 @@ func TestHealthz(t *testing.T) {
 	r := httptest.NewRequest("GET", "/healthz", nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
-	if w.Code != http.StatusOK || w.Body.String() != "ok" {
+	if w.Code != http.StatusOK {
 		t.Fatalf("healthz: %d %q", w.Code, w.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("healthz body 非 JSON: %v", err)
+	}
+	if body["status"] != "ok" {
+		t.Fatalf("healthz status: %v", body)
 	}
 }
 

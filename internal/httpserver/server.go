@@ -13,7 +13,9 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"telegram-online-player/internal/auth"
+	"telegram-online-player/internal/catalog"
 	"telegram-online-player/internal/config"
+	"telegram-online-player/internal/db"
 )
 
 //go:embed web/*
@@ -25,16 +27,23 @@ type Server struct {
 	sessions   *auth.SessionManager
 	playSigner *auth.PlayURLSigner
 	limiter    *auth.LoginLimiter
+	pool       *db.Pool       // 可为 nil(未配置 POSTGRES_DSN 的 auth-only 本地调试)
+	store      *catalog.Store // pool 为 nil 时同为 nil
 	httpSrv    *http.Server
 }
 
-func New(cfg *config.Config, logger *slog.Logger) *Server {
+// New 构造服务。pool 可为 nil:此时目录相关接口不可用,仅鉴权可用,便于本地调试。
+func New(cfg *config.Config, logger *slog.Logger, pool *db.Pool) *Server {
 	s := &Server{
 		cfg:        cfg,
 		logger:     logger,
 		sessions:   auth.NewSessionManager(cfg.SessionSecret, cfg.SessionMaxAge, cfg.SessionRenewWithin, cfg.CookieSecure),
 		playSigner: auth.NewPlayURLSigner(cfg.PlayURLSecret, cfg.PlayURLTTL),
 		limiter:    auth.NewLoginLimiter(5, 15*time.Minute, 15*time.Minute),
+		pool:       pool,
+	}
+	if pool != nil {
+		s.store = catalog.NewStore(pool.Pool)
 	}
 	s.httpSrv = &http.Server{
 		Addr:              cfg.HTTPAddr,
@@ -47,10 +56,7 @@ func New(cfg *config.Config, logger *slog.Logger) *Server {
 func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
-	})
+	mux.HandleFunc("GET /healthz", s.handleHealthz)
 
 	mux.HandleFunc("POST /api/login", s.handleLogin)
 	mux.HandleFunc("POST /api/logout", s.handleLogout)
@@ -138,6 +144,24 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// handleHealthz 是无需鉴权的就绪检查:进程存活即返回 200;
+// 若配置了数据库则附带 ping 结果,DB 不可用时返回 503。
+func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
+	body := map[string]any{"status": "ok"}
+	if s.pool != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		if err := s.pool.Ping(ctx); err != nil {
+			body["status"] = "degraded"
+			body["db"] = "down"
+			writeJSON(w, http.StatusServiceUnavailable, body)
+			return
+		}
+		body["db"] = "ok"
+	}
+	writeJSON(w, http.StatusOK, body)
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
