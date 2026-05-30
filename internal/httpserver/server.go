@@ -31,6 +31,7 @@ type Server struct {
 	store      catalogStore // pool 为 nil 时同为 nil
 	source     MediaSource  // broker 透传源,可为 nil(未配置 broker)
 	preparer   Preparer     // remux/transcode 冷路径异步准备,可为 nil
+	admin      AdminBroker  // tdl 登录管理,可为 nil(未配置 broker)
 	httpSrv    *http.Server
 }
 
@@ -53,9 +54,18 @@ type Preparer interface {
 	Prepare(token string)
 }
 
+// AdminBroker 是 tdl 登录管理所需的 broker 能力(brokerclient.Client 满足之),见 §14。
+type AdminBroker interface {
+	Status(ctx context.Context) (loggedIn bool, phone string, err error)
+	SendCode(ctx context.Context, phone string) (string, error)
+	SignIn(ctx context.Context, stepToken, code string) (needPassword bool, err error)
+	CheckPassword(ctx context.Context, stepToken, password string) error
+	Logout(ctx context.Context) error
+}
+
 // New 构造服务。pool 可为 nil:此时目录相关接口不可用,仅鉴权可用,便于本地调试。
-// source/preparer 可为 nil(未配置 broker 或缓存准备尚未启用)。
-func New(cfg *config.Config, logger *slog.Logger, pool *db.Pool, source MediaSource, preparer Preparer) *Server {
+// source/preparer/admin 可为 nil(未配置 broker 或缓存准备尚未启用)。
+func New(cfg *config.Config, logger *slog.Logger, pool *db.Pool, source MediaSource, preparer Preparer, admin AdminBroker) *Server {
 	s := &Server{
 		cfg:        cfg,
 		logger:     logger,
@@ -65,6 +75,7 @@ func New(cfg *config.Config, logger *slog.Logger, pool *db.Pool, source MediaSou
 		pool:       pool,
 		source:     source,
 		preparer:   preparer,
+		admin:      admin,
 	}
 	if pool != nil {
 		s.store = catalog.NewStore(pool.Pool)
@@ -95,6 +106,13 @@ func (s *Server) routes() http.Handler {
 
 	// 播放接口:不要求 cookie,但要求签名有效(见 §13.4)
 	mux.HandleFunc("GET /play/{token}", s.handlePlay)
+
+	// 后台 tdl 登录管理(需登录 cookie,见 §14)
+	mux.Handle("GET /admin/tdl-status", s.requireAuth(http.HandlerFunc(s.handleTdlStatus)))
+	mux.Handle("POST /admin/tdl-send-code", s.requireAuth(http.HandlerFunc(s.handleTdlSendCode)))
+	mux.Handle("POST /admin/tdl-sign-in", s.requireAuth(http.HandlerFunc(s.handleTdlSignIn)))
+	mux.Handle("POST /admin/tdl-check-password", s.requireAuth(http.HandlerFunc(s.handleTdlCheckPassword)))
+	mux.Handle("POST /admin/tdl-logout", s.requireAuth(http.HandlerFunc(s.handleTdlLogout)))
 
 	staticFS, err := fs.Sub(webFS, "web")
 	if err != nil {

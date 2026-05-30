@@ -64,12 +64,14 @@ func runServe() error {
 		logger.Warn("POSTGRES_DSN 未配置,目录功能不可用(仅鉴权可用)")
 	}
 
-	// 配置了 broker 则接入,作为 passthrough 透传源与下载源;否则透传/缓存准备不可用。
+	// 配置了 broker 则接入,作为 passthrough 透传源、下载源与 tdl 登录管理;否则相关功能不可用。
 	var source httpserver.MediaSource
 	var preparer httpserver.Preparer
+	var admin httpserver.AdminBroker
 	if cfg.BrokerURL != "" {
 		bc := brokerclient.New(cfg.BrokerURL, cfg.BrokerToken, nil)
 		source = bc
+		admin = bc
 
 		// remux/transcode 冷路径异步准备(需 DB 记录状态 + ffmpeg)。
 		if pool != nil {
@@ -84,7 +86,7 @@ func runServe() error {
 		logger.Warn("BROKER_URL 未配置,passthrough 透传与缓存准备不可用")
 	}
 
-	srv := httpserver.New(cfg, logger, pool, source, preparer)
+	srv := httpserver.New(cfg, logger, pool, source, preparer, admin)
 	return srv.Run(ctx)
 }
 

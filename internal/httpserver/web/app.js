@@ -47,6 +47,7 @@ function topbar(crumbHtml) {
     <h1><a href="#/">主播录播归档</a></h1>
     <span class="crumb">${crumbHtml || ""}</span>
     <span class="spacer"></span>
+    <a class="topnav" href="#/admin">Telegram 登录</a>
     <button id="logoutBtn">退出登录</button>
   </header>`;
 }
@@ -207,9 +208,112 @@ async function pollStatus(token, gen) {
   } catch (e) { if (!(e instanceof AuthError)) setTimeout(() => { if (gen === nav) pollStatus(token, gen); }, 4000); }
 }
 
+// ---- 后台:Telegram 登录引导(§14)----
+async function renderAdmin() {
+  const gen = ++nav;
+  appEl.innerHTML = topbar("Telegram 登录") +
+    `<main><div class="loading"><span class="spin"></span>读取状态…</div></main>`;
+  wireTopbar();
+  let st;
+  try {
+    const res = await api("/admin/tdl-status");
+    if (res.status === 503) { adminMain(`<div class="notice warn">broker 未配置或未运行,无法管理 Telegram 登录。</div>`); return; }
+    st = await res.json();
+  } catch (e) {
+    if (e instanceof AuthError) return;
+    adminMain(`<div class="notice warn">读取状态失败。</div>`); return;
+  }
+  if (gen !== nav) return;
+  if (st.logged_in) return adminLoggedIn(st.phone);
+  adminWizard();
+}
+
+function adminMain(html) {
+  const m = document.querySelector("main");
+  if (m) m.innerHTML = `<div class="card admincard">${html}</div>`;
+}
+
+function adminLoggedIn(phone) {
+  adminMain(`<h1>Telegram 已登录</h1>
+    <div class="info">账号:${esc(phone || "(未知)")}</div>
+    <button class="primary" id="lo">注销 Telegram</button>
+    <div id="am" class="msg"></div>`);
+  document.getElementById("lo").onclick = async () => {
+    if (!confirm("确定注销 Telegram?注销后需重新登录才能同步/播放。")) return;
+    try {
+      const res = await api("/admin/tdl-logout", { method: "POST" });
+      if (res.ok) renderAdmin();
+    } catch (e) {}
+  };
+}
+
+function adminWizard() {
+  // step: phone -> code -> (password) -> done
+  let stepToken = "";
+  adminMain(`<h1>登录 Telegram</h1>
+    <div id="aw"></div>
+    <div id="am" class="msg err"></div>`);
+  const aw = document.getElementById("aw"), am = document.getElementById("am");
+  const setMsg = (t, ok) => { am.className = "msg " + (ok ? "ok" : "err"); am.textContent = t || ""; };
+
+  const phoneStep = () => {
+    aw.innerHTML = `<input id="ph" placeholder="手机号(含国家码,如 +8613...)" autofocus>
+      <button class="primary" id="go">获取验证码</button>`;
+    document.getElementById("go").onclick = async () => {
+      const phone = document.getElementById("ph").value.trim();
+      if (!phone) return setMsg("请输入手机号");
+      setMsg("");
+      try {
+        const res = await api("/admin/tdl-send-code", { method: "POST",
+          headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone }) });
+        const d = await res.json();
+        if (!res.ok) return setMsg(d.error || "发送失败");
+        stepToken = d.step_token; codeStep();
+      } catch (e) { if (!(e instanceof AuthError)) setMsg("网络错误"); }
+    };
+  };
+  const codeStep = () => {
+    aw.innerHTML = `<input id="cd" placeholder="短信验证码" autofocus>
+      <button class="primary" id="go">登录</button>`;
+    setMsg("验证码已发送", true);
+    document.getElementById("go").onclick = async () => {
+      const code = document.getElementById("cd").value.trim();
+      if (!code) return setMsg("请输入验证码");
+      setMsg("");
+      try {
+        const res = await api("/admin/tdl-sign-in", { method: "POST",
+          headers: { "Content-Type": "application/json" }, body: JSON.stringify({ step_token: stepToken, code }) });
+        const d = await res.json();
+        if (!res.ok) return setMsg(d.error || "登录失败");
+        if (d.need_password) return pwdStep();
+        renderAdmin();
+      } catch (e) { if (!(e instanceof AuthError)) setMsg("网络错误"); }
+    };
+  };
+  const pwdStep = () => {
+    aw.innerHTML = `<input id="pwd" type="password" placeholder="两步验证密码(2FA)" autofocus>
+      <button class="primary" id="go">完成登录</button>`;
+    setMsg("该账号开启了两步验证,请输入密码", true);
+    document.getElementById("go").onclick = async () => {
+      const password = document.getElementById("pwd").value;
+      if (!password) return setMsg("请输入 2FA 密码");
+      setMsg("");
+      try {
+        const res = await api("/admin/tdl-check-password", { method: "POST",
+          headers: { "Content-Type": "application/json" }, body: JSON.stringify({ step_token: stepToken, password }) });
+        const d = await res.json();
+        if (!res.ok) return setMsg(d.error || "密码错误");
+        renderAdmin();
+      } catch (e) { if (!(e instanceof AuthError)) setMsg("网络错误"); }
+    };
+  };
+  phoneStep();
+}
+
 // ---- 路由 ----
 function route(authed) {
   const h = location.hash || "#/";
+  if (h.startsWith("#/admin")) return renderAdmin();
   if (h.startsWith("#/s/")) return renderTimeline(decodeURIComponent(h.slice(4)));
   if (h.startsWith("#/play/")) return renderPlay(decodeURIComponent(h.slice(7)));
   return renderGrid();
