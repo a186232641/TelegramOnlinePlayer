@@ -6,7 +6,9 @@
 
 - [x] **Phase 1 · 鉴权基础设施**:配置加载、HMAC cookie session、登录限流、登录/登出/whoami、最小登录页、`hash-password` CLI
 - [x] **Phase 2 · PostgreSQL 与目录数据模型**:`channels`/`streamers`/`streamer_alias`/`telegram_media` 表与索引、嵌入式版本化迁移器(启动自动迁移)、catalog 存取层(主播网格 / 时间线 / 按 token 取 / 频道 / 增量 offset / UpsertMedia)、`/healthz` 带 DB ping
-- [~] **Phase 3 · 同步服务(进行中)**:文件名解析器(§6,锚定时间戳/钉定时区/失败标 unparsed)、`StreamToken` 生成器(crypto/rand)、`Exporter` 接口 + `Syncer` 编排(遍历启用频道 / 增量 offset / 解析 / UpsertMedia / 设 Status),均以 fake 单测。**待办**:tdl-broker(gotd MTProto 单一出口,需 TG 凭据 + 登录)、探测 PlayMode(§4.1.5)、缩略图(§4.1.6)、全量对账检删(§4.1.3)
+- [~] **Phase 3 · 同步服务(进行中)**:文件名解析器(§6,锚定时间戳/钉定时区/失败标 unparsed)、`StreamToken` 生成器(crypto/rand)、`Exporter` 接口 + `Syncer` 编排(遍历启用频道 / 增量 offset / 解析 / UpsertMedia / 设 Status),均以 fake 单测。
+  - **tdl-broker 骨架(已搭)**:基于 gotd 的 MTProto 单一出口(`cmd/broker`)。生命周期 + session 文件存储、登录流程(发码/验证码/2FA/状态/注销,步骤 token + TTL)、令牌桶+并发门限速、历史导出 / 整文件下载 / 1MB 对齐 Range 读、内部 HTTP API(共享密钥 Bearer)、`brokerclient` 客户端(实现 `syncer.Exporter`)。纯逻辑与 HTTP 契约均已单测;**真正连接 Telegram 需 `TG_API_ID/HASH` 并完成一次交互式登录**。
+  - **待办**:把 Syncer/backend 接到 broker、探测 PlayMode(§4.1.5)、缩略图(§4.1.6)、全量对账检删(§4.1.3)
 - [ ] Phase 4 · 缓存播放(下载、归一化、签名 URL、LRU)
 - [ ] Phase 5 · 前端主播网格 / 时间线 / 播放页
 - [ ] Phase 6 · tdl Web 引导登录
@@ -54,13 +56,40 @@ go test ./internal/catalog/ -run Store -v
 ## 目录结构
 
 ```
-cmd/app/              主程序(serve / hash-password 两个子命令)
+cmd/app/              backend 主程序(serve / hash-password 两个子命令)
+cmd/broker/           tdl-broker 主程序(独占 MTProto session 的 Telegram 出口)
 internal/config/      环境变量加载
 internal/auth/        session、play URL 签名、登录限流
 internal/db/          PostgreSQL 连接池 + 嵌入式版本化迁移器
 internal/db/migrations/   SQL 迁移文件(<version>_<desc>.sql)
 internal/catalog/     目录领域模型与存取层(Store)、StreamToken 生成
 internal/syncer/      同步服务:文件名解析(§6)+ Exporter 接口 + Syncer 编排
-internal/httpserver/  HTTP 路由与处理器
+internal/broker/      gotd MTProto 出口:生命周期/登录/限速/导出/下载/Range + 内部 HTTP API
+internal/brokerclient/    broker 内部 API 的 Go 客户端(实现 syncer.Exporter)
+internal/httpserver/  backend HTTP 路由与处理器
 internal/httpserver/web/  静态前端资源(嵌入 binary)
 ```
+
+## tdl-broker(Telegram 出口)
+
+broker 是系统对 Telegram 的**唯一出口**,独占一份 MTProto session。backend/sync 经 `brokerclient`
+调用它,自身不碰 session(见 design §4.5、§11、§14)。本地运行示例:
+
+```sh
+$env:TG_API_ID            = '123456'              # my.telegram.org 申请
+$env:TG_API_HASH          = 'xxxxxxxx'
+$env:BROKER_INTERNAL_TOKEN= '与 backend 共享的随机密钥'
+$env:TG_SESSION_PATH      = './data/tdl/session.json'  # 0700 目录,仅 broker 可见
+$env:BROKER_ADDR          = ':8090'
+go run ./cmd/broker
+# 首次需经后台引导登录(Phase 6 的 /admin/tdl-login,内部转调 broker 的 /tg/send-code 等)
+```
+
+| broker 环境变量 | 含义 |
+| --- | --- |
+| `TG_API_ID` / `TG_API_HASH` | MTProto 接入凭据(必填) |
+| `BROKER_INTERNAL_TOKEN` | backend↔broker 共享密钥,Bearer 鉴权(必填) |
+| `TG_SESSION_PATH` | session 文件路径(默认 `./data/tdl/session.json`) |
+| `BROKER_ADDR` | 内部 HTTP API 监听地址(默认 `:8090`) |
+| `BROKER_RPS` / `BROKER_BURST` / `BROKER_MAX_CONCURRENT` | 对 Telegram 的限速与并发上限 |
+| `BROKER_LOGIN_STEP_TTL` | 登录步骤上下文存活时间(默认 5m) |
