@@ -9,6 +9,7 @@
 - [~] **Phase 3 · 同步服务(进行中)**:文件名解析器(§6,锚定时间戳/钉定时区/失败标 unparsed)、`StreamToken` 生成器(crypto/rand)、`Exporter` 接口 + `Syncer` 编排(遍历启用频道 / 增量 offset / 解析 / UpsertMedia / 设 Status),均以 fake 单测。
   - **tdl-broker 骨架(已搭)**:基于 gotd 的 MTProto 单一出口(`cmd/broker`)。生命周期 + session 文件存储、登录流程(发码/验证码/2FA/状态/注销,步骤 token + TTL)、令牌桶+并发门限速、历史导出 / 整文件下载 / 1MB 对齐 Range 读、内部 HTTP API(共享密钥 Bearer)、`brokerclient` 客户端(实现 `syncer.Exporter`)。纯逻辑与 HTTP 契约均已单测;**真正连接 Telegram 需 `TG_API_ID/HASH` 并完成一次交互式登录**。
   - **待办**:把 Syncer/backend 接到 broker、探测 PlayMode(§4.1.5)、缩略图(§4.1.6)、全量对账检删(§4.1.3)
+- [x] **目录 API**:`/api/streamers`(主播网格)、`/api/timeline?streamer=`(跨年时间线)、`/api/media/{token}`(详情),均需登录 cookie;响应 DTO 不泄露 `cache_path`/`last_error` 等内部字段;未配置 DB 时回 503。以 fake store 单测。
 - [ ] Phase 4 · 缓存播放(下载、归一化、签名 URL、LRU)
 - [ ] Phase 5 · 前端主播网格 / 时间线 / 播放页
 - [ ] Phase 6 · tdl Web 引导登录

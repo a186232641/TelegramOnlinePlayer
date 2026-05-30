@@ -27,10 +27,19 @@ type Server struct {
 	sessions   *auth.SessionManager
 	playSigner *auth.PlayURLSigner
 	limiter    *auth.LoginLimiter
-	pool       *db.Pool       // 可为 nil(未配置 POSTGRES_DSN 的 auth-only 本地调试)
-	store      *catalog.Store // pool 为 nil 时同为 nil
+	pool       *db.Pool     // 可为 nil(未配置 POSTGRES_DSN 的 auth-only 本地调试)
+	store      catalogStore // pool 为 nil 时同为 nil
 	httpSrv    *http.Server
 }
+
+// catalogStore 是目录接口所需的存取子集(catalog.Store 满足之),便于单测注入 fake。
+type catalogStore interface {
+	ListStreamers(ctx context.Context) ([]catalog.StreamerSummary, error)
+	StreamerTimeline(ctx context.Context, streamer string) ([]*catalog.Media, error)
+	MediaByToken(ctx context.Context, token string) (*catalog.Media, error)
+}
+
+var _ catalogStore = (*catalog.Store)(nil)
 
 // New 构造服务。pool 可为 nil:此时目录相关接口不可用,仅鉴权可用,便于本地调试。
 func New(cfg *config.Config, logger *slog.Logger, pool *db.Pool) *Server {
@@ -61,6 +70,11 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /api/login", s.handleLogin)
 	mux.HandleFunc("POST /api/logout", s.handleLogout)
 	mux.Handle("GET /api/whoami", s.requireAuth(http.HandlerFunc(s.handleWhoami)))
+
+	// 目录接口(均需登录 cookie)
+	mux.Handle("GET /api/streamers", s.requireAuth(http.HandlerFunc(s.handleStreamers)))
+	mux.Handle("GET /api/timeline", s.requireAuth(http.HandlerFunc(s.handleTimeline)))
+	mux.Handle("GET /api/media/{token}", s.requireAuth(http.HandlerFunc(s.handleMedia)))
 
 	staticFS, err := fs.Sub(webFS, "web")
 	if err != nil {
