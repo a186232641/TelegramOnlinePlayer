@@ -27,6 +27,7 @@ tdl-session/
 .env
 .env.local
 config.local.*
+*.local.ps1
 
 # 日志
 *.log
