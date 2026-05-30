@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 	_ "time/tzdata" // 内嵌 IANA 时区库,保证 MEDIA_TIMEZONE 在 Windows/精简容器内也能解析
@@ -120,6 +121,9 @@ func runHashPassword() error {
 	}
 
 	fmt.Println(string(hash))
-	fmt.Fprintln(os.Stderr, "已生成 bcrypt 哈希,请将上述字符串设为 ACCESS_PASSWORD_HASH 环境变量")
+	fmt.Fprintln(os.Stderr, "已生成 bcrypt 哈希。直接作为环境变量(如 PowerShell 单引号、shell export)时用上面这行。")
+	// bcrypt 串含 $,放进 docker compose 的 .env 会被当作变量插值,须把每个 $ 转义为 $$。
+	fmt.Fprintln(os.Stderr, "若写入 docker compose 的 .env,请用下面这行(已把 $ 转义为 $$):")
+	fmt.Fprintln(os.Stderr, "ACCESS_PASSWORD_HASH="+strings.ReplaceAll(string(hash), "$", "$$"))
 	return nil
 }

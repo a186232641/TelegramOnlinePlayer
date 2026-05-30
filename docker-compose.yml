@@ -15,7 +15,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env 设置 POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-recordings}
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -31,9 +31,9 @@ services:
       context: .
       target: broker
     environment:
-      TG_API_ID: ${TG_API_ID:?请在 .env 设置 TG_API_ID}
-      TG_API_HASH: ${TG_API_HASH:?请在 .env 设置 TG_API_HASH}
-      BROKER_INTERNAL_TOKEN: ${BROKER_INTERNAL_TOKEN:?请在 .env 设置 BROKER_INTERNAL_TOKEN}
+      TG_API_ID: ${TG_API_ID}
+      TG_API_HASH: ${TG_API_HASH}
+      BROKER_INTERNAL_TOKEN: ${BROKER_INTERNAL_TOKEN}
       BROKER_ADDR: ":8090"
       TG_SESSION_PATH: "/data/tdl/session.json"
       BROKER_RPS: ${BROKER_RPS:-2}
@@ -57,14 +57,14 @@ services:
       broker:
         condition: service_started   # 仅需 broker 进程在;目录/登录无需等其连上 Telegram
     environment:
-      ACCESS_PASSWORD_HASH: ${ACCESS_PASSWORD_HASH:?请用 `app hash-password` 生成后填入 .env}
-      SESSION_SECRET: ${SESSION_SECRET:?请在 .env 设置 32+ 字节随机值}
-      PLAY_URL_SECRET: ${PLAY_URL_SECRET:?请在 .env 设置 32+ 字节随机值}
+      ACCESS_PASSWORD_HASH: ${ACCESS_PASSWORD_HASH}
+      SESSION_SECRET: ${SESSION_SECRET}
+      PLAY_URL_SECRET: ${PLAY_URL_SECRET}
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
       HTTP_ADDR: ":8080"
       POSTGRES_DSN: "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-recordings}?sslmode=disable"
       BROKER_URL: "http://broker:8090"
-      BROKER_INTERNAL_TOKEN: ${BROKER_INTERNAL_TOKEN:?}
+      BROKER_INTERNAL_TOKEN: ${BROKER_INTERNAL_TOKEN}
       MEDIA_TIMEZONE: ${MEDIA_TIMEZONE:-Asia/Shanghai}
       CACHE_DIR: "/cache"
       CACHE_MAX_BYTES: ${CACHE_MAX_BYTES:-21474836480}
@@ -91,7 +91,7 @@ services:
     environment:
       POSTGRES_DSN: "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-recordings}?sslmode=disable"
       BROKER_URL: "http://broker:8090"
-      BROKER_INTERNAL_TOKEN: ${BROKER_INTERNAL_TOKEN:?}
+      BROKER_INTERNAL_TOKEN: ${BROKER_INTERNAL_TOKEN}
       MEDIA_TIMEZONE: ${MEDIA_TIMEZONE:-Asia/Shanghai}
 
 volumes:
