@@ -1,0 +1,26 @@
+# 仅需源码与 go.mod/go.sum 进入构建上下文
+.git
+.idea
+.vscode
+bin/
+dist/
+vendor/
+
+# 运行时数据与缓存(绝不进镜像)
+data/
+cache/
+tdl-session/
+*.session
+*.session-journal
+
+# 本地密钥与环境
+.env
+.env.local
+config.local.*
+*.local.ps1
+
+# 日志与杂项
+*.log
+logs/
+*.md
+design.md

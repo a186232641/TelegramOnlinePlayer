@@ -50,6 +50,30 @@ go run ./cmd/app
 启动时若配置了 `POSTGRES_DSN`,会自动连接并应用 `internal/db/migrations/` 下的版本化迁移
 (版本记录于 `schema_migrations` 表,每个迁移在独立事务内执行)。`GET /healthz` 会附带 DB ping。
 
+## Docker 部署(推荐,对应 design §11)
+
+`docker compose` 一把拉起 `postgres` + `broker` + `backend`(backend 已内嵌前端,无需单独 frontend 容器)。
+**tdl session 卷仅 broker 挂载**,sync/backend 经 broker 访问 Telegram,不碰 session。
+
+```sh
+cp .env.example .env            # 填 TG 凭据、密钥等(见文件内注释)
+# 生成访问密码哈希填入 .env 的 ACCESS_PASSWORD_HASH:
+docker compose run --rm backend hash-password
+
+docker compose up -d --build    # 起 postgres / broker / backend
+# 浏览器开 http://<host>:8080 登录 → 顶栏「Telegram 登录」完成首次 tdl 登录
+
+# 配置频道并同步(sync 在 tools profile,按需运行,不随 up 常驻):
+docker compose run --rm sync add-channel <channel_id> <label>
+docker compose run --rm sync run
+# 周期同步:宿主机 cron 调上面的 run 即可。
+```
+
+镜像由根目录 `Dockerfile` 多 target 构建:`builder` 一次编译三个二进制,`broker`/`sync` 为精简
+Alpine,`backend` 额外装 `ffmpeg`;均以非 root 用户运行,命名卷预置属主可写。必填环境变量见
+`.env.example` 与 design §11。**外网部署务必经 HTTPS**(Cookie 带 `Secure`);纯 HTTP 调试时
+在 `.env` 设 `COOKIE_SECURE=false`。
+
 ## 运行测试
 
 ```sh
