@@ -23,6 +23,13 @@ type Config struct {
 	TGAPIHash          string
 	DataDir            string
 	MediaTimezone      *time.Location // 文件名时间戳的假定时区(见 design §6),解析裸时间用
+
+	// 播放/缓存(Phase 4)
+	BrokerURL            string // broker 内部 API 基址(为空则 passthrough/下载不可用)
+	BrokerToken          string // 调用 broker 的共享密钥(BROKER_INTERNAL_TOKEN)
+	CacheDir             string // 归一化产物与下载临时区
+	CacheMaxBytes        int64  // 缓存容量上限(含临时区),见 §8
+	TranscodeConcurrency int    // ffmpeg 转码并发上限,见 §9.7
 }
 
 func Load() (*Config, error) {
@@ -35,6 +42,12 @@ func Load() (*Config, error) {
 		PostgresDSN:        os.Getenv("POSTGRES_DSN"),
 		TGAPIHash:          os.Getenv("TG_API_HASH"),
 		DataDir:            env("DATA_DIR", "./data"),
+
+		BrokerURL:            os.Getenv("BROKER_URL"),
+		BrokerToken:          os.Getenv("BROKER_INTERNAL_TOKEN"),
+		CacheDir:             env("CACHE_DIR", "./cache"),
+		CacheMaxBytes:        envInt64("CACHE_MAX_BYTES", 20<<30), // 默认 20 GiB
+		TranscodeConcurrency: envInt("TRANSCODE_CONCURRENCY", 1),
 	}
 
 	hash := os.Getenv("ACCESS_PASSWORD_HASH")
@@ -100,6 +113,24 @@ func envBool(key string, def bool) bool {
 		return def
 	}
 	return b
+}
+
+func envInt(key string, def int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return def
+}
+
+func envInt64(key string, def int64) int64 {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			return n
+		}
+	}
+	return def
 }
 
 func envDuration(key string, def time.Duration) time.Duration {

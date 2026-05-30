@@ -34,7 +34,7 @@ func newTestServer(t *testing.T, password string) *Server {
 		CookieSecure:       false,
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return New(cfg, logger, nil)
+	return New(cfg, logger, nil, nil, nil)
 }
 
 func TestLoginWhoamiFlow(t *testing.T) {

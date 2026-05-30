@@ -128,6 +128,23 @@ func (s *Store) UpsertMedia(ctx context.Context, m *Media) error {
 	).Scan(&m.ID, &m.StreamToken)
 }
 
+// UpdateCache 更新某条录播的缓存状态(由后端播放期管理)。
+// path/lastErr 传 nil 表示置空对应列。状态机:none→preparing→ready/failed。
+func (s *Store) UpdateCache(ctx context.Context, token, state string, path, lastErr *string) error {
+	ct, err := s.pool.Exec(ctx,
+		`UPDATE telegram_media
+		 SET cache_state = $2, cache_path = $3, last_error = $4, updated_at = now()
+		 WHERE stream_token = $1`,
+		token, state, path, lastErr)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // MediaByToken 按 stream_token 取单条(播放换签使用)。未命中返回 ErrNotFound。
 func (s *Store) MediaByToken(ctx context.Context, token string) (*Media, error) {
 	row := s.pool.QueryRow(ctx,

@@ -12,6 +12,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/term"
 
+	"telegram-online-player/internal/brokerclient"
 	"telegram-online-player/internal/config"
 	"telegram-online-player/internal/db"
 	"telegram-online-player/internal/httpserver"
@@ -58,7 +59,15 @@ func runServe() error {
 		logger.Warn("POSTGRES_DSN 未配置,目录功能不可用(仅鉴权可用)")
 	}
 
-	srv := httpserver.New(cfg, logger, pool)
+	// 配置了 broker 则接入,作为 passthrough 透传源;否则播放透传不可用。
+	var source httpserver.MediaSource
+	if cfg.BrokerURL != "" {
+		source = brokerclient.New(cfg.BrokerURL, cfg.BrokerToken, nil)
+	} else {
+		logger.Warn("BROKER_URL 未配置,passthrough 透传不可用")
+	}
+
+	srv := httpserver.New(cfg, logger, pool, source, nil)
 	return srv.Run(ctx)
 }
 

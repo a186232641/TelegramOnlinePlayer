@@ -29,6 +29,8 @@ type Server struct {
 	limiter    *auth.LoginLimiter
 	pool       *db.Pool     // 可为 nil(未配置 POSTGRES_DSN 的 auth-only 本地调试)
 	store      catalogStore // pool 为 nil 时同为 nil
+	source     MediaSource  // broker 透传源,可为 nil(未配置 broker)
+	preparer   Preparer     // remux/transcode 冷路径异步准备,可为 nil
 	httpSrv    *http.Server
 }
 
@@ -41,8 +43,19 @@ type catalogStore interface {
 
 var _ catalogStore = (*catalog.Store)(nil)
 
+// MediaSource 是 passthrough 透传所需的 broker 能力子集(brokerclient.Client 满足之)。
+type MediaSource interface {
+	ReadRange(ctx context.Context, channelID, messageID, offset, length int64) ([]byte, error)
+}
+
+// Preparer 触发 remux/transcode 冷路径的异步准备,实现须幂等且非阻塞(single-flight)。
+type Preparer interface {
+	Prepare(token string)
+}
+
 // New 构造服务。pool 可为 nil:此时目录相关接口不可用,仅鉴权可用,便于本地调试。
-func New(cfg *config.Config, logger *slog.Logger, pool *db.Pool) *Server {
+// source/preparer 可为 nil(未配置 broker 或缓存准备尚未启用)。
+func New(cfg *config.Config, logger *slog.Logger, pool *db.Pool, source MediaSource, preparer Preparer) *Server {
 	s := &Server{
 		cfg:        cfg,
 		logger:     logger,
@@ -50,6 +63,8 @@ func New(cfg *config.Config, logger *slog.Logger, pool *db.Pool) *Server {
 		playSigner: auth.NewPlayURLSigner(cfg.PlayURLSecret, cfg.PlayURLTTL),
 		limiter:    auth.NewLoginLimiter(5, 15*time.Minute, 15*time.Minute),
 		pool:       pool,
+		source:     source,
+		preparer:   preparer,
 	}
 	if pool != nil {
 		s.store = catalog.NewStore(pool.Pool)
@@ -75,6 +90,11 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("GET /api/streamers", s.requireAuth(http.HandlerFunc(s.handleStreamers)))
 	mux.Handle("GET /api/timeline", s.requireAuth(http.HandlerFunc(s.handleTimeline)))
 	mux.Handle("GET /api/media/{token}", s.requireAuth(http.HandlerFunc(s.handleMedia)))
+	mux.Handle("GET /api/media/{token}/play-url", s.requireAuth(http.HandlerFunc(s.handlePlayURL)))
+	mux.Handle("GET /api/media/{token}/status", s.requireAuth(http.HandlerFunc(s.handlePlayStatus)))
+
+	// 播放接口:不要求 cookie,但要求签名有效(见 §13.4)
+	mux.HandleFunc("GET /play/{token}", s.handlePlay)
 
 	staticFS, err := fs.Sub(webFS, "web")
 	if err != nil {
