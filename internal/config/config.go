@@ -22,6 +22,7 @@ type Config struct {
 	TGAPIID            int
 	TGAPIHash          string
 	DataDir            string
+	MediaTimezone      *time.Location // 文件名时间戳的假定时区(见 design §6),解析裸时间用
 }
 
 func Load() (*Config, error) {
@@ -57,6 +58,13 @@ func Load() (*Config, error) {
 		}
 		cfg.TGAPIID = id
 	}
+
+	tz := env("MEDIA_TIMEZONE", "Asia/Shanghai")
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		return nil, fmt.Errorf("MEDIA_TIMEZONE %q 无法解析(需内嵌 tzdata): %w", tz, err)
+	}
+	cfg.MediaTimezone = loc
 
 	return cfg, nil
 }

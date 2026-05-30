@@ -6,7 +6,7 @@
 
 - [x] **Phase 1 · 鉴权基础设施**:配置加载、HMAC cookie session、登录限流、登录/登出/whoami、最小登录页、`hash-password` CLI
 - [x] **Phase 2 · PostgreSQL 与目录数据模型**:`channels`/`streamers`/`streamer_alias`/`telegram_media` 表与索引、嵌入式版本化迁移器(启动自动迁移)、catalog 存取层(主播网格 / 时间线 / 按 token 取 / 频道 / 增量 offset / UpsertMedia)、`/healthz` 带 DB ping
-- [ ] Phase 3 · 同步服务(tdl 扫描 + 文件名解析)
+- [~] **Phase 3 · 同步服务(进行中)**:文件名解析器(§6,锚定时间戳/钉定时区/失败标 unparsed)、`StreamToken` 生成器(crypto/rand)、`Exporter` 接口 + `Syncer` 编排(遍历启用频道 / 增量 offset / 解析 / UpsertMedia / 设 Status),均以 fake 单测。**待办**:tdl-broker(gotd MTProto 单一出口,需 TG 凭据 + 登录)、探测 PlayMode(§4.1.5)、缩略图(§4.1.6)、全量对账检删(§4.1.3)
 - [ ] Phase 4 · 缓存播放(下载、归一化、签名 URL、LRU)
 - [ ] Phase 5 · 前端主播网格 / 时间线 / 播放页
 - [ ] Phase 6 · tdl Web 引导登录
@@ -31,6 +31,8 @@ $env:COOKIE_SECURE        = 'false'   # 本地 HTTP 调试关掉
 $env:HTTP_ADDR            = ':8080'
 # 可选:配置 PostgreSQL 后启用目录功能;为空则降级为 auth-only,启动时仅打印告警
 $env:POSTGRES_DSN         = 'postgres://user:pass@localhost:5432/recordings?sslmode=disable'
+# 可选:文件名时间戳的假定时区(见 design §6),默认 Asia/Shanghai;tzdata 已内嵌
+$env:MEDIA_TIMEZONE       = 'Asia/Shanghai'
 go run ./cmd/app
 
 # 4. 浏览器打开 http://localhost:8080,输入密码即可登录
@@ -57,7 +59,8 @@ internal/config/      环境变量加载
 internal/auth/        session、play URL 签名、登录限流
 internal/db/          PostgreSQL 连接池 + 嵌入式版本化迁移器
 internal/db/migrations/   SQL 迁移文件(<version>_<desc>.sql)
-internal/catalog/     目录领域模型与存取层(Store)
+internal/catalog/     目录领域模型与存取层(Store)、StreamToken 生成
+internal/syncer/      同步服务:文件名解析(§6)+ Exporter 接口 + Syncer 编排
 internal/httpserver/  HTTP 路由与处理器
 internal/httpserver/web/  静态前端资源(嵌入 binary)
 ```

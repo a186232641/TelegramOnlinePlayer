@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	_ "time/tzdata" // 内嵌 IANA 时区库,保证 MEDIA_TIMEZONE 在 Windows/精简容器内也能解析
 
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/term"
