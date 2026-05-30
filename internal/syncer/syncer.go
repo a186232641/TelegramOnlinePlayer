@@ -176,6 +176,11 @@ func (s *Syncer) buildMedia(channelID int64, msg ExportedMessage) (*catalog.Medi
 		m.DurationSec = &d
 	}
 
+	// 探测播放模式(轻量:依据扩展名/MIME);决定播放期三路分流。
+	container, playMode := ClassifyPlayMode(msg.FileName, msg.MimeType)
+	m.Container = &container
+	m.PlayMode = &playMode
+
 	res := ParseFileName(msg.FileName, s.loc)
 	if res.OK {
 		streamer := res.Streamer

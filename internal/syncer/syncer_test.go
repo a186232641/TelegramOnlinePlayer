@@ -102,6 +102,10 @@ func TestSyncChannelParsesAndUpserts(t *testing.T) {
 	if m0.Status != catalog.StatusReady || m0.Streamer == nil || *m0.Streamer != "张三" || m0.RecordedAt == nil {
 		t.Fatalf("第一条应解析成功: %+v", m0)
 	}
+	// 探测应写入 PlayMode/Container(.mp4 → passthrough)
+	if m0.PlayMode == nil || *m0.PlayMode != catalog.PlayPassthrough || m0.Container == nil {
+		t.Fatalf("第一条应被分类为 passthrough: %+v", m0)
+	}
 	// 第二条:解析失败 → unparsed + 无 streamer
 	m1 := store.upserted[1]
 	if m1.Status != catalog.StatusUnparsed || m1.Streamer != nil || m1.RecordedAt != nil {
