@@ -1,0 +1,80 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"os"
+	"os/signal"
+	"syscall"
+
+	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/term"
+
+	"telegram-online-player/internal/config"
+	"telegram-online-player/internal/httpserver"
+)
+
+func main() {
+	if len(os.Args) >= 2 && os.Args[1] == "hash-password" {
+		if err := runHashPassword(); err != nil {
+			fmt.Fprintln(os.Stderr, "错误:", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	if err := runServe(); err != nil {
+		fmt.Fprintln(os.Stderr, "错误:", err)
+		os.Exit(1)
+	}
+}
+
+func runServe() error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	srv := httpserver.New(cfg, logger)
+	return srv.Run(ctx)
+}
+
+func runHashPassword() error {
+	fmt.Fprint(os.Stderr, "请输入要哈希的访问密码(输入不回显): ")
+	pw, err := term.ReadPassword(int(os.Stdin.Fd()))
+	fmt.Fprintln(os.Stderr)
+	if err != nil {
+		return fmt.Errorf("读取密码失败: %w", err)
+	}
+	if len(pw) == 0 {
+		return fmt.Errorf("密码不能为空")
+	}
+	if len(pw) < 8 {
+		fmt.Fprintln(os.Stderr, "提示: 密码长度建议 ≥ 12 位")
+	}
+
+	fmt.Fprint(os.Stderr, "再次输入以确认: ")
+	pw2, err := term.ReadPassword(int(os.Stdin.Fd()))
+	fmt.Fprintln(os.Stderr)
+	if err != nil {
+		return fmt.Errorf("读取密码失败: %w", err)
+	}
+	if string(pw) != string(pw2) {
+		return fmt.Errorf("两次输入不一致")
+	}
+
+	hash, err := bcrypt.GenerateFromPassword(pw, 12)
+	if err != nil {
+		return fmt.Errorf("bcrypt 失败: %w", err)
+	}
+
+	fmt.Println(string(hash))
+	fmt.Fprintln(os.Stderr, "已生成 bcrypt 哈希,请将上述字符串设为 ACCESS_PASSWORD_HASH 环境变量")
+	return nil
+}
